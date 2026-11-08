@@ -1,5 +1,3 @@
-import com.formdev.flatlaf.FlatLaf;
-// import com.formdev.flatlaf.intellijthemes.materialthemeuilite.FlatMTMaterialDarkerIJTheme;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -8,7 +6,6 @@ import java.awt.Font;
 import java.awt.GridLayout;
 import java.awt.Insets;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -17,7 +14,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.StringJoiner;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -30,12 +26,10 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
 
 public class Main extends JFrame {
 
   static final Path DATA = Path.of("habits.csv");
-  static final DateTimeFormatter DATE = DateTimeFormatter.ISO_LOCAL_DATE;
   static final DateTimeFormatter DAY_LETTER = DateTimeFormatter.ofPattern(
     "EEEEE"
   );
@@ -43,49 +37,9 @@ public class Main extends JFrame {
     "EEE, MMM d"
   );
 
-  static class Habit {
-
-    String name;
-
-    final Set<LocalDate> done = new HashSet<>();
-
-    Habit(String name) {
-      this.name = name;
-    }
-
-    boolean isDone(LocalDate d) {
-      return done.contains(d);
-    }
-
-    void toggle(LocalDate d) {
-      if (!done.remove(d)) done.add(d);
-    }
-
-    int streak(LocalDate today) {
-      int s = 0;
-      LocalDate d = done.contains(today) ? today : today.minusDays(1);
-      while (done.contains(d)) {
-        s++;
-        d = d.minusDays(1);
-      }
-      return s;
-    }
-
-    int bestStreak() {
-      if (done.isEmpty()) return 0;
-      List<LocalDate> days = new ArrayList<>(done);
-      Collections.sort(days);
-      int best = 1,
-        cur = 1;
-      for (int i = 1; i < days.size(); i++) {
-        cur = days.get(i).equals(days.get(i - 1).plusDays(1)) ? cur + 1 : 1;
-        best = Math.max(best, cur);
-      }
-      return best;
-    }
-  }
-
   final List<Habit> habits = new ArrayList<>();
+  final HabitStore store = new HabitStore(DATA);
+
   final JPanel listPanel = new JPanel();
   final JTextField input = new JTextField();
   final JLabel status = new JLabel("Ready");
@@ -102,7 +56,6 @@ public class Main extends JFrame {
     );
     date.setForeground(Color.GRAY);
 
-
     input.setCaretColor(new Color(0xE6E6E6));
     input.setSelectionColor(new Color(0x4A6FA5));
     input.setSelectedTextColor(Color.WHITE);
@@ -114,10 +67,15 @@ public class Main extends JFrame {
     inputRow.add(input, BorderLayout.CENTER);
     inputRow.add(add, BorderLayout.EAST);
 
-    JPanel headerRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-    headerRight.add(date);
+    JButton stats = new JButton("Stats");
+    stats.addActionListener(e -> new StatsDialog(this).setVisible(true));
     JButton settings = new JButton("Settings");
     settings.addActionListener(e -> new SettingsDialog(this).setVisible(true));
+
+    JPanel headerRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+    headerRight.add(date);
+    headerRight.add(stats);
+    headerRight.add(settings);
 
     headerRight.add(settings);
 
@@ -296,35 +254,16 @@ public class Main extends JFrame {
 
   void load() {
     habits.clear();
-    if (!Files.exists(DATA)) return;
     try {
-      for (String line : Files.readAllLines(DATA)) {
-        if (line.isBlank()) continue;
-        String[] parts = line.split(",", 2);
-        Habit h = new Habit(parts[0]);
-        if (
-          parts.length > 1 && !parts[1].isBlank()
-        ) for (String d : parts[1].split(";"))
-          if (!d.isBlank()) h.done.add(LocalDate.parse(d, DATE));
-        habits.add(h);
-      }
+      habits.addAll(store.load());
     } catch (Exception ex) {
       status.setText("Could not load: " + ex.getMessage());
     }
   }
 
   void save(String msg) {
-    StringBuilder sb = new StringBuilder();
-    for (Habit h : habits) {
-      StringJoiner j = new StringJoiner(";");
-      h.done
-        .stream()
-        .sorted()
-        .forEach(d -> j.add(d.format(DATE)));
-      sb.append(h.name).append(',').append(j).append(System.lineSeparator());
-    }
     try {
-      Files.writeString(DATA, sb.toString());
+      store.save(habits);
       status.setText(msg + "  \u2022  " + habits.size() + " habits");
     } catch (IOException ex) {
       status.setText("Save failed: " + ex.getMessage());
