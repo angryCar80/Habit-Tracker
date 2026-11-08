@@ -1,4 +1,5 @@
-import com.formdev.flatlaf.intellijthemes.materialthemeuilite.FlatMTMaterialDarkerIJTheme;
+import com.formdev.flatlaf.FlatLaf;
+// import com.formdev.flatlaf.intellijthemes.materialthemeuilite.FlatMTMaterialDarkerIJTheme;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -101,9 +102,6 @@ public class Main extends JFrame {
     );
     date.setForeground(Color.GRAY);
 
-    JPanel titles = new JPanel(new BorderLayout());
-    titles.add(title, BorderLayout.WEST);
-    titles.add(date, BorderLayout.EAST);
 
     input.setCaretColor(new Color(0xE6E6E6));
     input.setSelectionColor(new Color(0x4A6FA5));
@@ -115,6 +113,17 @@ public class Main extends JFrame {
 
     inputRow.add(input, BorderLayout.CENTER);
     inputRow.add(add, BorderLayout.EAST);
+
+    JPanel headerRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+    headerRight.add(date);
+    JButton settings = new JButton("Settings");
+    settings.addActionListener(e -> new SettingsDialog(this).setVisible(true));
+
+    headerRight.add(settings);
+
+    JPanel titles = new JPanel(new BorderLayout());
+    titles.add(title, BorderLayout.WEST);
+    titles.add(headerRight, BorderLayout.EAST);
 
     JPanel header = new JPanel(new BorderLayout());
     header.setBorder(BorderFactory.createEmptyBorder(12, 12, 0, 12));
@@ -323,16 +332,7 @@ public class Main extends JFrame {
   }
 
   public static void main(String[] args) {
-    FlatMTMaterialDarkerIJTheme.setup();
-
-    UIManager.put("Component.arc", 12);
-    UIManager.put("Button.arc", 12);
-    UIManager.put("TextComponent.arc", 10);
-    UIManager.put("Component.focusWidth", 0);
-    UIManager.put("ScrollBar.thumbArc", 12);
-    UIManager.put("ScrollBar.width", 10);
-    UIManager.put("defaultFont", new Font("Fira Sans", Font.PLAIN, 14));
-
+    ThemeManager.apply(ThemeManager.load());
     SwingUtilities.invokeLater(Main::new);
   }
 }

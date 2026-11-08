@@ -1,3 +1,3 @@
 default:
-	javac -d bin -cp "lib/*" Main.java
+	javac -d bin -cp "lib/*" *.java
 	java -cp "bin:lib/*" Main
