@@ -88,8 +88,8 @@ public class Main extends JFrame {
     JPanel headerRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
     headerRight.add(date);
     headerRight.add(stats);
-    headerRight.add(journal);
     headerRight.add(settings);
+    headerRight.add(journal);
 
     headerRight.add(settings);
 

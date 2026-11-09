@@ -28,7 +28,7 @@ public final class Journal {
       return;
     }
     Files.createDirectories(DIR);
-    final Path tmp = DIR.resolve(file.getFileName() + ".temp");
+    final Path tmp = DIR.resolve(file.getFileName() + ".tmp");
     Files.writeString(tmp, text);
     try {
       Files.move(
@@ -55,9 +55,9 @@ public final class Journal {
             dates.add(LocalDate.parse(n, DATE));
           } catch (final Exception ignored) {}
         });
+      dates.sort(Comparator.reverseOrder());
+      return dates;
     }
-    dates.sort(Comparator.reverseOrder());
-    return dates;
   }
 
   private static Path file(final LocalDate d) {
