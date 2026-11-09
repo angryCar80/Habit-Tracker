@@ -10,10 +10,7 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -30,6 +27,7 @@ import javax.swing.SwingUtilities;
 public class Main extends JFrame {
 
   static final Path DATA = Path.of("habits.csv");
+
   static final DateTimeFormatter DAY_LETTER = DateTimeFormatter.ofPattern(
     "EEEEE"
   );
@@ -37,11 +35,18 @@ public class Main extends JFrame {
     "EEE, MMM d"
   );
 
-  final List<Habit> habits = new ArrayList<>();
-  final HabitStore store = new HabitStore(DATA);
+  public static void main(String[] args) {
+    ThemeManager.apply(ThemeManager.load());
+    SwingUtilities.invokeLater(Main::new);
+  }
 
+  JournalDialog journalDialog;
+  final List<Habit> habits = new ArrayList<>();
+
+  final HabitStore store = new HabitStore(DATA);
   final JPanel listPanel = new JPanel();
   final JTextField input = new JTextField();
+
   final JLabel status = new JLabel("Ready");
 
   public Main() {
@@ -72,9 +77,18 @@ public class Main extends JFrame {
     JButton settings = new JButton("Settings");
     settings.addActionListener(e -> new SettingsDialog(this).setVisible(true));
 
+    JButton journal = new JButton("Journal");
+    journal.addActionListener(e -> {
+      if (journalDialog == null || !journalDialog.isDisplayable()) {
+        journalDialog = new JournalDialog(this);
+      }
+      journalDialog.setVisible(true);
+    });
+
     JPanel headerRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
     headerRight.add(date);
     headerRight.add(stats);
+    headerRight.add(journal);
     headerRight.add(settings);
 
     headerRight.add(settings);
@@ -268,10 +282,5 @@ public class Main extends JFrame {
     } catch (IOException ex) {
       status.setText("Save failed: " + ex.getMessage());
     }
-  }
-
-  public static void main(String[] args) {
-    ThemeManager.apply(ThemeManager.load());
-    SwingUtilities.invokeLater(Main::new);
   }
 }
