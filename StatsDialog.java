@@ -85,6 +85,29 @@ public class StatsDialog extends JDialog {
     return panel;
   }
 
+  private JPanel focusSummary() {
+    SessionLog.Summary s = SessionLog.summary();
+    JPanel panel = new JPanel(new GridLayout(1, 2, 8, 0));
+    panel.add(
+      card(
+        "Focus Today",
+        s.sessionsToday() +
+          " \u00b7 " +
+          SessionLog.formatMinutes(s.minutesToday())
+      )
+    );
+
+    panel.add(
+      card(
+        "Focus total",
+        s.sessionsTotal() +
+          "  \u00b7  " +
+          SessionLog.formatMinutes(s.minutesTotal())
+      )
+    );
+    return panel;
+  }
+
   private JPanel card(String title, String value) {
     JPanel panel = new JPanel(new BorderLayout(0, 4));
     panel.setBorder(

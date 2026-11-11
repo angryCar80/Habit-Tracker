@@ -41,6 +41,8 @@ public class Main extends JFrame {
   }
 
   JournalDialog journalDialog;
+  TimerDialog timerDialog;
+  final FocusTimer focusTimer = new FocusTimer();
   final List<Habit> habits = new ArrayList<>();
 
   final HabitStore store = new HabitStore(DATA);
@@ -48,9 +50,11 @@ public class Main extends JFrame {
   final JTextField input = new JTextField();
 
   final JLabel status = new JLabel("Ready");
+  final JLabel timerStatus = new JLabel();
 
   public Main() {
     super("Habit Tracker");
+    Notifier.init();
     setDefaultCloseOperation(EXIT_ON_CLOSE);
     setLayout(new BorderLayout(8, 8));
 
@@ -85,12 +89,17 @@ public class Main extends JFrame {
       journalDialog.setVisible(true);
     });
 
+    JButton timer = new JButton("Timer");
+    timer.addActionListener(e -> {
+      if (timerDialog == null) timerDialog = new TimerDialog(this, focusTimer);
+      timerDialog.setVisible(true);
+    });
+
     JPanel headerRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
     headerRight.add(date);
     headerRight.add(stats);
-    headerRight.add(settings);
     headerRight.add(journal);
-
+    headerRight.add(timer);
     headerRight.add(settings);
 
     JPanel titles = new JPanel(new BorderLayout());
@@ -109,8 +118,15 @@ public class Main extends JFrame {
     scroll.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 12));
     add(scroll, BorderLayout.CENTER);
 
-    status.setBorder(BorderFactory.createEmptyBorder(0, 12, 8, 12));
-    add(status, BorderLayout.SOUTH);
+    JPanel statusBar = new JPanel(new BorderLayout(8, 0));
+    statusBar.setBorder(BorderFactory.createEmptyBorder(0, 12, 8, 12));
+    timerStatus.setForeground(Color.GRAY);
+    statusBar.add(status, BorderLayout.WEST);
+    statusBar.add(timerStatus, BorderLayout.EAST);
+    add(statusBar, BorderLayout.SOUTH);
+
+    focusTimer.addListener(this::updateTimerStatus);
+    updateTimerStatus();
 
     add.addActionListener(e -> addHabit());
     input.addActionListener(e -> addHabit());
@@ -125,6 +141,19 @@ public class Main extends JFrame {
     setSize(640, 500);
     setLocationRelativeTo(null);
     setVisible(true);
+  }
+
+  void updateTimerStatus() {
+    FocusTimer.State state = focusTimer.state();
+    if (state == FocusTimer.State.RUNNING || state == FocusTimer.State.PAUSED) {
+      timerStatus.setText(
+        "Focus " + FocusTimer.formatTime(focusTimer.remainingSeconds())
+      );
+    } else if (state == FocusTimer.State.FINISHED) {
+      timerStatus.setText("Focus done");
+    } else {
+      timerStatus.setText("");
+    }
   }
 
   void addHabit() {
