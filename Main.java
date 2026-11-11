@@ -63,7 +63,6 @@ public class Main extends JFrame {
     JLabel date = new JLabel(
       LocalDate.now().format(DateTimeFormatter.ofPattern("EEE, MMM d yyyy"))
     );
-    date.setForeground(Color.GRAY);
 
     input.setCaretColor(new Color(0xE6E6E6));
     input.setSelectionColor(new Color(0x4A6FA5));
@@ -78,8 +77,6 @@ public class Main extends JFrame {
 
     JButton stats = new JButton("Stats");
     stats.addActionListener(e -> new StatsDialog(this).setVisible(true));
-    JButton settings = new JButton("Settings");
-    settings.addActionListener(e -> new SettingsDialog(this).setVisible(true));
 
     JButton journal = new JButton("Journal");
     journal.addActionListener(e -> {
@@ -95,22 +92,31 @@ public class Main extends JFrame {
       timerDialog.setVisible(true);
     });
 
-    JPanel headerRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-    headerRight.add(date);
-    headerRight.add(stats);
-    headerRight.add(journal);
-    headerRight.add(timer);
-    headerRight.add(settings);
+    JButton settings = new JButton("Settings");
+    settings.addActionListener(e -> new SettingsDialog(this).setVisible(true));
 
-    JPanel titles = new JPanel(new BorderLayout());
-    titles.add(title, BorderLayout.WEST);
-    titles.add(headerRight, BorderLayout.EAST);
+    JPanel titleBlock = new JPanel(new BorderLayout(0, 2));
+    titleBlock.add(title, BorderLayout.NORTH);
+    titleBlock.add(date, BorderLayout.SOUTH);
+
+    JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+    actions.add(stats);
+    actions.add(journal);
+    actions.add(timer);
+    actions.add(settings);
+
+    JPanel topRow = new JPanel(new BorderLayout(12, 0));
+    topRow.add(titleBlock, BorderLayout.WEST);
+    topRow.add(actions, BorderLayout.EAST);
 
     JPanel header = new JPanel(new BorderLayout());
     header.setBorder(BorderFactory.createEmptyBorder(12, 12, 0, 12));
-    header.add(titles, BorderLayout.NORTH);
+    header.add(topRow, BorderLayout.NORTH);
     header.add(inputRow, BorderLayout.SOUTH);
     add(header, BorderLayout.NORTH);
+
+    date.setForeground(Color.GRAY);
+    date.setFont(date.getFont().deriveFont(Font.PLAIN, 12f));
 
     listPanel.setLayout(new BoxLayout(listPanel, BoxLayout.Y_AXIS));
 
@@ -137,8 +143,8 @@ public class Main extends JFrame {
       habits.size() + " habits loaded"
     );
 
-    setMinimumSize(new Dimension(480, 420));
-    setSize(640, 500);
+    setMinimumSize(new Dimension(560, 420));
+    setSize(720, 520);
     setLocationRelativeTo(null);
     setVisible(true);
   }
