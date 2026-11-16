@@ -12,6 +12,8 @@ doing. Built with Java Swing and FlatLaf.
 - Settings with a large FlatLaf/IntelliJ theme picker and live preview.
 - Hidden habits, revealed with slash commands.
 - Pin one habit to a **Focus** section until you complete it.
+- Habit groups with collapsible sections, group editing, and an editable group
+  selector when adding habits.
 - Data is stored as CSV in your user data folder — no database required.
 
 ## Requirements
@@ -92,6 +94,16 @@ Type these in the habit input field. Normal text still adds a new habit.
 
 Habits also have **Pin**, **Unpin**, and **Show** buttons in the list.
 
+## Groups
+
+Choose or type a group next to the habit field before adding a habit. Habits in
+the same group appear under a collapsible header, and **Ungrouped** habits are
+shown last. Use the `...` menu on a group header to rename or delete it.
+
+Renaming a group to an existing name merges the two groups. Deleting a group
+moves its habits back to **Ungrouped**. Hidden and pinned habits stay in the
+**Hidden** and **Focus** sections rather than inside groups.
+
 ## Data Location
 
 Data is stored in the OS user data folder:
@@ -113,7 +125,7 @@ project folder, they are copied to the user data folder on first run.
 - [x] Hidden habits
 - [x] Pinned focus habit
 - [x] Runnable jar and `jpackage` desktop packaging
-- [ ] Groups that can hold multiple habits
+- [x] Groups that can hold multiple habits
 - [ ] Cross-platform installers / CI releases
 - [ ] Move from CSV to SQL (not planned for now)
 

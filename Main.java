@@ -1,5 +1,6 @@
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -10,18 +11,26 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
+import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 
 public class Main extends JFrame {
@@ -37,6 +46,8 @@ public class Main extends JFrame {
 
   boolean showHidden;
   final java.util.Set<String> collapsedGroups = new java.util.HashSet<>();
+
+  final JComboBox<String> groupBox = new JComboBox<>();
 
   public static void main(String[] args) {
     AppPaths.init();
@@ -73,11 +84,18 @@ public class Main extends JFrame {
     input.setSelectedTextColor(Color.WHITE);
 
     JButton add = new JButton("Add Habit");
+    groupBox.setEditable(true);
+    groupBox.setPreferredSize(new Dimension(150, 28));
+    groupBox.setMaximumRowCount(12);
+    groupBox.setToolTipText("Group for the new habit");
+    JPanel inputActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+    inputActions.add(groupBox);
+    inputActions.add(add);
     JPanel inputRow = new JPanel(new BorderLayout(6, 0));
     inputRow.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
 
     inputRow.add(input, BorderLayout.CENTER);
-    inputRow.add(add, BorderLayout.EAST);
+    inputRow.add(inputActions, BorderLayout.EAST);
 
     JButton stats = new JButton("Stats");
     stats.addActionListener(e -> new StatsDialog(this).setVisible(true));
@@ -139,6 +157,7 @@ public class Main extends JFrame {
     updateTimerStatus();
 
     load();
+    refreshGroupBox();
     rebuild();
     if (!status.getText().startsWith("Could not")) status.setText(
       habits.size() + " habits loaded"
@@ -166,32 +185,15 @@ public class Main extends JFrame {
     }
   }
 
-  void renameHabit(Habit h) {
-    JTextField field = new JTextField(h.name);
-    field.setCaretColor(new Color(0xE6E6E6));
-    field.setSelectionColor(new Color(0x4A6FA5));
-    field.setSelectedTextColor(Color.WHITE);
-    field.selectAll();
-    SwingUtilities.invokeLater(() -> {
-      field.requestFocusInWindow();
-      field.selectAll();
-    });
+  void editHabit(Habit h) {
+    HabitDialog dialog = new HabitDialog(this, h, groupNames());
+    if (!dialog.showDialog()) return;
 
-    Object[] options = { "Rename", "Cancel" };
-    int result = JOptionPane.showOptionDialog(
-      this,
-      field,
-      "Edit Habit",
-      JOptionPane.OK_CANCEL_OPTION,
-      JOptionPane.PLAIN_MESSAGE,
-      null,
-      options,
-      options[0]
-    );
-    if (result != 0) return;
-
-    String name = field.getText();
-    name = name.trim().replace(",", " ").replace(";", " ");
+    String name = dialog
+      .habitName()
+      .trim()
+      .replace(",", " ")
+      .replace(";", " ");
     if (name.isEmpty()) {
       status.setText("Name cannot be empty");
       return;
@@ -203,8 +205,11 @@ public class Main extends JFrame {
       }
 
     h.name = name;
+    h.group = canonicalGroup(dialog.groupName());
+    h.hidden = dialog.hiddenSelected();
+    refreshGroupBox();
     rebuild();
-    save("Renamed to " + name);
+    save("Updated " + h.name);
   }
 
   void rebuild() {
@@ -241,9 +246,36 @@ public class Main extends JFrame {
       else visible++;
     }
 
+    Comparator<String> groupOrder = Comparator
+      .comparing((String g) -> g.isBlank())
+      .thenComparing(String.CASE_INSENSITIVE_ORDER);
+    Map<String, List<Habit>> groups = new TreeMap<>(groupOrder);
     for (Habit h : habits) {
       if (h.hidden || h.pinned) continue;
-      listPanel.add(habitRow(h, today));
+      String group = h.group == null ? "" : h.group;
+      groups.computeIfAbsent(group, k -> new ArrayList<>()).add(h);
+    }
+
+    boolean hasNamedGroups = false;
+    for (String group : groups.keySet())
+      if (!group.isBlank()) {
+        hasNamedGroups = true;
+        break;
+      }
+
+    for (Map.Entry<String, List<Habit>> entry : groups.entrySet()) {
+      String group = entry.getKey();
+      List<Habit> members = entry.getValue();
+      boolean showHeader = !group.isBlank() || hasNamedGroups;
+
+      if (showHeader) {
+        listPanel.add(groupHeader(group, members.size()));
+        if (!collapsedGroups.contains(group)) {
+          for (Habit h : members) listPanel.add(habitRow(h, today));
+        }
+      } else {
+        for (Habit h : members) listPanel.add(habitRow(h, today));
+      }
     }
 
     if (showHidden && hidden > 0) {
@@ -268,6 +300,41 @@ public class Main extends JFrame {
     listPanel.repaint();
   }
 
+  String selectedGroup() {
+    Object value = groupBox.isEditable()
+      ? groupBox.getEditor().getItem()
+      : groupBox.getSelectedItem();
+    if (value == null) value = groupBox.getSelectedItem();
+    return canonicalGroup(value == null ? "" : value.toString());
+  }
+
+  String canonicalGroup(String raw) {
+    String name = raw == null
+      ? ""
+      : raw
+        .trim()
+        .replace(",", " ")
+        .replace("\n", " ")
+        .replace("\r", " ");
+    if (name.isBlank() || name.equalsIgnoreCase("Ungrouped")) return "";
+    for (Habit h : habits)
+      if (
+        h.group != null && !h.group.isBlank() && h.group.equalsIgnoreCase(name)
+      ) return h.group;
+    return name;
+  }
+
+  String groupLabel(String group) {
+    return group == null || group.isBlank() ? "Ungrouped" : group;
+  }
+
+  List<String> groupNames() {
+    TreeSet<String> groups = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    for (Habit h : habits)
+      if (h.group != null && !h.group.isBlank()) groups.add(h.group);
+    return new ArrayList<>(groups);
+  }
+
   JPanel sectionHeader(String text, Color color) {
     JLabel label = new JLabel(text);
     label.setFont(label.getFont().deriveFont(Font.BOLD, 13f));
@@ -278,6 +345,103 @@ public class Main extends JFrame {
     panel.add(label, BorderLayout.WEST);
     panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
     return panel;
+  }
+
+  JPanel groupHeader(String group, int count) {
+    boolean collapsed = collapsedGroups.contains(group);
+    String text =
+      (collapsed ? "\u25B8 " : "\u25BE ") +
+      groupLabel(group) +
+      " (" +
+      count +
+      ")";
+
+    JButton toggle = new JButton(text);
+    toggle.setFont(toggle.getFont().deriveFont(Font.BOLD, 13f));
+    toggle.setForeground(new Color(0x4A6FA5));
+    toggle.setBorderPainted(false);
+    toggle.setContentAreaFilled(false);
+    toggle.setFocusPainted(false);
+    toggle.setMargin(new Insets(0, 0, 0, 0));
+    toggle.setHorizontalAlignment(SwingConstants.LEFT);
+    toggle.addActionListener(e -> toggleGroup(group));
+
+    JPanel panel = new JPanel(new BorderLayout(4, 0));
+    panel.setBorder(BorderFactory.createEmptyBorder(12, 4, 4, 4));
+    panel.add(toggle, BorderLayout.WEST);
+
+    if (!group.isBlank()) {
+      JButton options = new JButton("...");
+      options.setMargin(new Insets(0, 6, 0, 6));
+      options.setFocusable(false);
+      options.setToolTipText("Group options");
+      options.addActionListener(e -> showGroupMenu(options, group));
+      panel.add(options, BorderLayout.EAST);
+    }
+
+    panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+    return panel;
+  }
+
+  void toggleGroup(String group) {
+    if (!collapsedGroups.remove(group)) collapsedGroups.add(group);
+    rebuild();
+  }
+
+  void showGroupMenu(Component invoker, String group) {
+    JPopupMenu menu = new JPopupMenu();
+    JMenuItem rename = new JMenuItem("Rename group");
+    rename.addActionListener(e -> renameGroup(group));
+    JMenuItem delete = new JMenuItem("Delete group");
+    delete.addActionListener(e -> deleteGroup(group));
+    menu.add(rename);
+    menu.add(delete);
+    menu.show(invoker, 0, invoker.getHeight());
+  }
+
+  void renameGroup(String group) {
+    String raw = JOptionPane.showInputDialog(this, "Rename group", group);
+    if (raw == null) return;
+
+    String target = canonicalGroup(raw);
+    if (target.equals(group)) return;
+
+    boolean wasCollapsed = collapsedGroups.remove(group);
+    for (Habit h : habits)
+      if (h.group != null && h.group.equalsIgnoreCase(group)) h.group = target;
+    if (wasCollapsed && !target.isBlank()) collapsedGroups.add(target);
+
+    refreshGroupBox();
+    groupBox.setSelectedItem(target.isBlank() ? "Ungrouped" : target);
+    rebuild();
+    save("Renamed group to " + groupLabel(target));
+  }
+
+  void deleteGroup(String group) {
+    int count = 0;
+    for (Habit h : habits)
+      if (h.group != null && h.group.equalsIgnoreCase(group)) count++;
+
+    int ok = JOptionPane.showConfirmDialog(
+      this,
+      "Delete group \"" +
+        group +
+        "\"?\n" +
+        count +
+        " habit(s) will become Ungrouped.",
+      "Delete Group",
+      JOptionPane.OK_CANCEL_OPTION
+    );
+    if (ok != JOptionPane.OK_OPTION) return;
+
+    for (Habit h : habits)
+      if (h.group != null && h.group.equalsIgnoreCase(group)) h.group = "";
+    collapsedGroups.remove(group);
+
+    refreshGroupBox();
+    groupBox.setSelectedItem("Ungrouped");
+    rebuild();
+    save("Deleted group " + group);
   }
 
   JPanel habitRow(Habit h, LocalDate today) {
@@ -308,13 +472,11 @@ public class Main extends JFrame {
     left.add(week, BorderLayout.CENTER);
 
     int now = h.streak(today);
-    JLabel streak = new JLabel(
-      "now " + now + "\u00b7 best " + h.bestStreak()
-    );
+    JLabel streak = new JLabel("now " + now + "\u00b7 best " + h.bestStreak());
     streak.setForeground(now > 0 ? new Color(0xF5A623) : new Color(0x7A7D85));
 
     JButton edit = new JButton("Edit");
-    edit.addActionListener(e -> renameHabit(h));
+    edit.addActionListener(e -> editHabit(h));
 
     JButton del = new JButton("Delete");
     del.addActionListener(e -> {
@@ -326,6 +488,7 @@ public class Main extends JFrame {
       );
       if (ok == JOptionPane.OK_OPTION) {
         habits.remove(h);
+        refreshGroupBox();
         rebuild();
         save("Deleted " + h.name);
       }
@@ -379,6 +542,7 @@ public class Main extends JFrame {
       status.setText("Save failed: " + ex.getMessage());
     }
   }
+
   void submitInput() {
     String raw = input.getText().trim();
     if (raw.isEmpty()) return;
@@ -386,6 +550,7 @@ public class Main extends JFrame {
     if (raw.startsWith("/")) handleCommand(raw);
     else addHabit(raw);
   }
+
   void addHabit(String raw) {
     String name = raw.trim().replace(",", " ").replace(";", " ");
     if (name.isEmpty()) {
@@ -397,37 +562,62 @@ public class Main extends JFrame {
         status.setText("Already exists");
         return;
       }
-    habits.add(new Habit(name));
+    Habit h = new Habit(name);
+    h.group = selectedGroup();
+    habits.add(h);
+    input.setText("");
+    refreshGroupBox();
     rebuild();
     save("Added " + name);
   }
+
+  void refreshGroupBox() {
+    String keep = selectedGroup();
+    List<String> groups = groupNames();
+
+    groupBox.removeAllItems();
+    groupBox.addItem("Ungrouped");
+    for (String group : groups) groupBox.addItem(group);
+
+    boolean exists = false;
+    for (String group : groups)
+      if (group.equalsIgnoreCase(keep)) {
+        exists = true;
+        break;
+      }
+    groupBox.setSelectedItem(keep.isBlank() || !exists ? "Ungrouped" : keep);
+  }
+
   void handleCommand(String raw) {
     String[] parts = raw.split("\\s+", 2);
     String cmd = parts[0].toLowerCase();
     String arg = parts.length > 1 ? parts[1].trim() : "";
 
     switch (cmd) {
-        case "/help" -> JOptionPane.showMessageDialog(this,
-          "/hidden — show hidden habits\n" +
+      case "/help" -> JOptionPane.showMessageDialog(
+        this,
+        "/hidden — show hidden habits\n" +
           "/hide <name>\n/show <name>\n" +
-          "/pin <name>\n/unpin");
-        case "/hidden" -> {
-          showHidden = !showHidden;
-          rebuild();
-          status.setText(showHidden ? "Showing hidden habits" : "Hidden habits hidden");
-        }
-        case "/hide" -> setHidden(arg, true);
-        case "/show" -> setHidden(arg, false);
-        case "/pin" -> pinHabit(findHabit(arg));
-        case "/unpin" -> unpinHabit();
-        default -> status.setText("Unknown command — try /help");
+          "/pin <name>\n/unpin"
+      );
+      case "/hidden" -> {
+        showHidden = !showHidden;
+        rebuild();
+        status.setText(
+          showHidden ? "Showing hidden habits" : "Hidden habits hidden"
+        );
       }
+      case "/hide" -> setHidden(arg, true);
+      case "/show" -> setHidden(arg, false);
+      case "/pin" -> pinHabit(findHabit(arg));
+      case "/unpin" -> unpinHabit();
+      default -> status.setText("Unknown command — try /help");
+    }
   }
 
   Habit findHabit(String name) {
     if (name.isBlank()) return null;
-    for (Habit h : habits)
-      if (h.name.equalsIgnoreCase(name)) return h;
+    for (Habit h : habits) if (h.name.equalsIgnoreCase(name)) return h;
     Habit match = null;
     for (Habit h : habits)
       if (h.name.toLowerCase().startsWith(name.toLowerCase())) {
@@ -436,6 +626,7 @@ public class Main extends JFrame {
       }
     return match;
   }
+
   void setHidden(String name, boolean hidden) {
     Habit h = findHabit(name);
     if (h == null) {

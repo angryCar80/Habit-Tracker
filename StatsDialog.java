@@ -139,8 +139,13 @@ public class StatsDialog extends JDialog {
       (h.completionBetween(today.minusDays(27), today) * 100f) / 28f
     );
 
+    String group = h.group == null || h.group.isBlank()
+      ? "Ungrouped"
+      : h.group;
     JLabel meta = new JLabel(
-      pct +
+      group +
+        "  \u00b7  " +
+        pct +
         "%  \u00b7  now " +
         h.streak(today) +
         " \u00b7 best " +
