@@ -12,6 +12,9 @@ public class Habit {
   final Set<LocalDate> done = new HashSet<>();
   LocalTime reminder;
   LocalDate lastNotified;
+  boolean hidden;
+  String group = "";
+  boolean pinned;
 
   Habit(String name) {
     this.name = name;

@@ -9,7 +9,7 @@ import java.util.List;
 
 public final class SessionLog {
 
-  static final Path FILE = Path.of("focus-log.csv");
+  static final Path FILE = AppPaths.file("focus-log.csv");
   static final DateTimeFormatter STAMP = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
   public record Summary(

@@ -11,7 +11,7 @@ import java.util.stream.Stream;
 
 public final class Journal {
 
-  static final Path DIR = Path.of("journal");
+  static final Path DIR = AppPaths.file("journal");
   static final DateTimeFormatter DATE = DateTimeFormatter.ISO_LOCAL_DATE;
 
   static String read(final LocalDate d) throws IOException {

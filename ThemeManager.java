@@ -30,7 +30,7 @@ public final class ThemeManager {
     "com.formdev.flatlaf.intellijthemes.materialthemeuilite.FlatMTMaterialDarkerIJTheme";
   public static final String DEFAULT_NAME = "Material Darker (Material)";
 
-  private static final Path SETTINGS = Path.of("settings.properties");
+  private static final Path SETTINGS = AppPaths.file("settings.properties");
   private static final String KEY_NAME = "theme.name";
   private static final String KEY_CLASS = "theme.class";
   private static final String KEY_DARK = "theme.dark";

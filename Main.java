@@ -26,7 +26,7 @@ import javax.swing.SwingUtilities;
 
 public class Main extends JFrame {
 
-  static final Path DATA = Path.of("habits.csv");
+  static final Path DATA = AppPaths.file("habits.csv");
 
   static final DateTimeFormatter DAY_LETTER = DateTimeFormatter.ofPattern(
     "EEEEE"
@@ -35,7 +35,11 @@ public class Main extends JFrame {
     "EEE, MMM d"
   );
 
+  boolean showHidden;
+  final java.util.Set<String> collapsedGroups = new java.util.HashSet<>();
+
   public static void main(String[] args) {
+    AppPaths.init();
     ThemeManager.apply(ThemeManager.load());
     SwingUtilities.invokeLater(Main::new);
   }
@@ -134,14 +138,14 @@ public class Main extends JFrame {
     focusTimer.addListener(this::updateTimerStatus);
     updateTimerStatus();
 
-    add.addActionListener(e -> addHabit());
-    input.addActionListener(e -> addHabit());
-
     load();
     rebuild();
     if (!status.getText().startsWith("Could not")) status.setText(
       habits.size() + " habits loaded"
     );
+
+    add.addActionListener(e -> submitInput());
+    input.addActionListener(e -> submitInput());
 
     setMinimumSize(new Dimension(560, 420));
     setSize(720, 520);
@@ -160,23 +164,6 @@ public class Main extends JFrame {
     } else {
       timerStatus.setText("");
     }
-  }
-
-  void addHabit() {
-    String name = input.getText().trim().replace(",", " ").replace(";", " ");
-    if (name.isEmpty()) {
-      status.setText("Enter a habit name");
-      return;
-    }
-    for (Habit h : habits)
-      if (h.name.equalsIgnoreCase(name)) {
-        status.setText("Already exists");
-        return;
-      }
-    habits.add(new Habit(name));
-    input.setText("");
-    rebuild();
-    save("Added " + name);
   }
 
   void renameHabit(Habit h) {
@@ -224,73 +211,53 @@ public class Main extends JFrame {
     listPanel.removeAll();
     LocalDate today = LocalDate.now();
 
-    for (Habit h : habits) {
-      JLabel nameLabel = new JLabel(h.name);
-      nameLabel.setFont(nameLabel.getFont().deriveFont(Font.PLAIN, 15f));
-
-      JPanel week = new JPanel(new GridLayout(1, 7, 4, 0));
-      for (int i = 6; i >= 0; i--) {
-        LocalDate d = today.minusDays(i);
-        JToggleButton b = new JToggleButton(d.format(DAY_LETTER));
-        b.setMargin(new Insets(2, 2, 2, 2));
-        b.setPreferredSize(new Dimension(30, 28));
-        b.setSelected(h.isDone(d));
-        b.setToolTipText(d.format(DAY_TOOLTIP));
-        if (d.equals(today)) b.setFont(b.getFont().deriveFont(Font.BOLD));
-        b.addActionListener(e -> {
-          h.toggle(d);
-          save("Updated " + h.name);
-          rebuild();
-        });
-        week.add(b);
+    boolean pinsChanged = false;
+    for (Habit h : habits)
+      if (h.pinned && h.isDone(today)) {
+        h.pinned = false;
+        pinsChanged = true;
       }
-      JPanel left = new JPanel(new BorderLayout(0, 4));
-      left.add(nameLabel, BorderLayout.NORTH);
-      left.add(week, BorderLayout.CENTER);
-      int now = h.streak(today);
+    if (pinsChanged) try {
+      store.save(habits);
+    } catch (IOException ignored) {}
 
-      JLabel streak = new JLabel(
-        "now " + now + "\u00b7 best " + h.bestStreak()
-      );
-      streak.setForeground(now > 0 ? new Color(0xF5A623) : new Color(0x7A7D85));
-      JButton edit = new JButton("Edit");
-      edit.addActionListener(e -> renameHabit(h));
+    Habit pinned = null;
+    for (Habit h : habits)
+      if (h.pinned) {
+        pinned = h;
+        break;
+      }
 
-      JButton del = new JButton("Delete");
-      del.addActionListener(e -> {
-        int ok = JOptionPane.showConfirmDialog(
-          this,
-          "Delete \"" + h.name + "\"?",
-          "Confirm",
-          JOptionPane.OK_CANCEL_OPTION
-        );
-        if (ok == JOptionPane.OK_OPTION) {
-          habits.remove(h);
-          rebuild();
-          save("Deleted " + h.name);
-        }
-      });
-
-      JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-      right.add(streak);
-      right.add(edit);
-      right.add(del);
-
-      JPanel row = new JPanel(new BorderLayout(8, 0));
-      row.setBorder(
-        BorderFactory.createCompoundBorder(
-          BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(0x3A3A3A)),
-          BorderFactory.createEmptyBorder(8, 4, 8, 4)
-        )
-      );
-      row.add(left, BorderLayout.CENTER);
-      row.add(right, BorderLayout.EAST);
-      row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 76));
-      listPanel.add(row);
+    if (pinned != null) {
+      listPanel.add(sectionHeader("Focus", new Color(0x4A6FA5)));
+      listPanel.add(habitRow(pinned, today));
     }
 
-    if (habits.isEmpty()) {
-      JLabel empty = new JLabel("No habits yet \u2014 add one above");
+    int visible = 0;
+    int hidden = 0;
+    for (Habit h : habits) {
+      if (h.pinned) continue;
+      if (h.hidden) hidden++;
+      else visible++;
+    }
+
+    for (Habit h : habits) {
+      if (h.hidden || h.pinned) continue;
+      listPanel.add(habitRow(h, today));
+    }
+
+    if (showHidden && hidden > 0) {
+      listPanel.add(sectionHeader("Hidden (" + hidden + ")", Color.GRAY));
+      for (Habit h : habits)
+        if (h.hidden && !h.pinned) listPanel.add(habitRow(h, today));
+    }
+
+    if (pinned == null && visible == 0 && (!showHidden || hidden == 0)) {
+      JLabel empty = new JLabel(
+        habits.isEmpty()
+          ? "No habits yet \u2014 add one above"
+          : "No visible habits \u2014 type /hidden to show hidden"
+      );
       empty.setForeground(Color.GRAY);
       empty.setBorder(BorderFactory.createEmptyBorder(16, 4, 0, 0));
       listPanel.add(empty);
@@ -299,6 +266,100 @@ public class Main extends JFrame {
     listPanel.add(Box.createVerticalGlue());
     listPanel.revalidate();
     listPanel.repaint();
+  }
+
+  JPanel sectionHeader(String text, Color color) {
+    JLabel label = new JLabel(text);
+    label.setFont(label.getFont().deriveFont(Font.BOLD, 13f));
+    label.setForeground(color);
+
+    JPanel panel = new JPanel(new BorderLayout());
+    panel.setBorder(BorderFactory.createEmptyBorder(12, 4, 4, 4));
+    panel.add(label, BorderLayout.WEST);
+    panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+    return panel;
+  }
+
+  JPanel habitRow(Habit h, LocalDate today) {
+    JLabel nameLabel = new JLabel(h.name);
+    nameLabel.setFont(nameLabel.getFont().deriveFont(Font.PLAIN, 15f));
+    if (h.hidden) nameLabel.setForeground(Color.GRAY);
+
+    JPanel week = new JPanel(new GridLayout(1, 7, 4, 0));
+    for (int i = 6; i >= 0; i--) {
+      LocalDate d = today.minusDays(i);
+      JToggleButton b = new JToggleButton(d.format(DAY_LETTER));
+      b.setMargin(new Insets(2, 2, 2, 2));
+      b.setPreferredSize(new Dimension(30, 28));
+      b.setSelected(h.isDone(d));
+      b.setToolTipText(d.format(DAY_TOOLTIP));
+      if (d.equals(today)) b.setFont(b.getFont().deriveFont(Font.BOLD));
+      b.addActionListener(e -> {
+        h.toggle(d);
+        if (h.pinned && h.isDone(today)) h.pinned = false;
+        save("Updated " + h.name);
+        rebuild();
+      });
+      week.add(b);
+    }
+
+    JPanel left = new JPanel(new BorderLayout(0, 4));
+    left.add(nameLabel, BorderLayout.NORTH);
+    left.add(week, BorderLayout.CENTER);
+
+    int now = h.streak(today);
+    JLabel streak = new JLabel(
+      "now " + now + "\u00b7 best " + h.bestStreak()
+    );
+    streak.setForeground(now > 0 ? new Color(0xF5A623) : new Color(0x7A7D85));
+
+    JButton edit = new JButton("Edit");
+    edit.addActionListener(e -> renameHabit(h));
+
+    JButton del = new JButton("Delete");
+    del.addActionListener(e -> {
+      int ok = JOptionPane.showConfirmDialog(
+        this,
+        "Delete \"" + h.name + "\"?",
+        "Confirm",
+        JOptionPane.OK_CANCEL_OPTION
+      );
+      if (ok == JOptionPane.OK_OPTION) {
+        habits.remove(h);
+        rebuild();
+        save("Deleted " + h.name);
+      }
+    });
+
+    JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+    right.add(streak);
+    if (h.pinned) {
+      JButton unpin = new JButton("Unpin");
+      unpin.addActionListener(e -> unpinHabit());
+      right.add(unpin);
+    } else if (h.hidden) {
+      JButton show = new JButton("Show");
+      show.addActionListener(e -> setHidden(h.name, false));
+      right.add(show);
+    } else {
+      JButton pin = new JButton("Pin");
+      pin.addActionListener(e -> pinHabit(h));
+      right.add(pin);
+    }
+    right.add(edit);
+    right.add(del);
+
+    JPanel row = new JPanel(new BorderLayout(8, 0));
+    row.setBorder(
+      BorderFactory.createCompoundBorder(
+        BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(0x3A3A3A)),
+        BorderFactory.createEmptyBorder(8, 4, 8, 4)
+      )
+    );
+    row.add(left, BorderLayout.CENTER);
+    row.add(right, BorderLayout.EAST);
+    row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 76));
+    return row;
   }
 
   void load() {
@@ -317,5 +378,94 @@ public class Main extends JFrame {
     } catch (IOException ex) {
       status.setText("Save failed: " + ex.getMessage());
     }
+  }
+  void submitInput() {
+    String raw = input.getText().trim();
+    if (raw.isEmpty()) return;
+    input.setText("");
+    if (raw.startsWith("/")) handleCommand(raw);
+    else addHabit(raw);
+  }
+  void addHabit(String raw) {
+    String name = raw.trim().replace(",", " ").replace(";", " ");
+    if (name.isEmpty()) {
+      status.setText("Enter a habit name");
+      return;
+    }
+    for (Habit h : habits)
+      if (h.name.equalsIgnoreCase(name)) {
+        status.setText("Already exists");
+        return;
+      }
+    habits.add(new Habit(name));
+    rebuild();
+    save("Added " + name);
+  }
+  void handleCommand(String raw) {
+    String[] parts = raw.split("\\s+", 2);
+    String cmd = parts[0].toLowerCase();
+    String arg = parts.length > 1 ? parts[1].trim() : "";
+
+    switch (cmd) {
+        case "/help" -> JOptionPane.showMessageDialog(this,
+          "/hidden — show hidden habits\n" +
+          "/hide <name>\n/show <name>\n" +
+          "/pin <name>\n/unpin");
+        case "/hidden" -> {
+          showHidden = !showHidden;
+          rebuild();
+          status.setText(showHidden ? "Showing hidden habits" : "Hidden habits hidden");
+        }
+        case "/hide" -> setHidden(arg, true);
+        case "/show" -> setHidden(arg, false);
+        case "/pin" -> pinHabit(findHabit(arg));
+        case "/unpin" -> unpinHabit();
+        default -> status.setText("Unknown command — try /help");
+      }
+  }
+
+  Habit findHabit(String name) {
+    if (name.isBlank()) return null;
+    for (Habit h : habits)
+      if (h.name.equalsIgnoreCase(name)) return h;
+    Habit match = null;
+    for (Habit h : habits)
+      if (h.name.toLowerCase().startsWith(name.toLowerCase())) {
+        if (match != null) return null; // ambiguous
+        match = h;
+      }
+    return match;
+  }
+  void setHidden(String name, boolean hidden) {
+    Habit h = findHabit(name);
+    if (h == null) {
+      status.setText("Habit not found or ambiguous");
+      return;
+    }
+    h.hidden = hidden;
+    save((hidden ? "Hidden " : "Showing ") + h.name);
+    rebuild();
+  }
+
+  void pinHabit(Habit h) {
+    if (h == null) {
+      status.setText("Habit not found");
+      return;
+    }
+    LocalDate today = LocalDate.now();
+    if (h.isDone(today)) {
+      status.setText("Already done today");
+      return;
+    }
+    for (Habit other : habits) other.pinned = false;
+    h.pinned = true;
+    save("Pinned " + h.name);
+    rebuild();
+  }
+
+  void unpinHabit() {
+    for (Habit h : habits) h.pinned = false;
+    save("Unpinned");
+    rebuild();
   }
 }

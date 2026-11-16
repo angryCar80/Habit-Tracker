@@ -23,19 +23,35 @@ public final class HabitStore {
   List<Habit> load() throws IOException {
     List<Habit> habits = new ArrayList<>();
     if (!Files.exists(file)) return habits;
+
+    boolean pinnedSeen = false;
+
     for (String line : Files.readAllLines(file)) {
       if (line.isBlank()) continue;
-      String[] parts = line.split(",", 3);
+
+      String[] parts = line.split(",", 6);
       Habit h = new Habit(parts[0]);
+
       if (
         parts.length > 1 && !parts[1].isBlank()
       ) for (String d : parts[1].split(";"))
         if (!d.isBlank()) h.done.add(LocalDate.parse(d, DATE));
+
       if (parts.length > 2 && !parts[2].isBlank()) {
         try {
           h.reminder = LocalTime.parse(parts[2].trim(), TIME);
         } catch (Exception ignored) {}
       }
+
+      if (parts.length > 3) h.hidden = "1".equals(parts[3].trim());
+      if (parts.length > 4) h.group = sanitizeGroup(parts[4]);
+      if (parts.length > 5) h.pinned = "1".equals(parts[5].trim());
+
+      if (h.pinned) {
+        if (pinnedSeen) h.pinned = false;
+        else pinnedSeen = true;
+      }
+
       habits.add(h);
     }
     return habits;
@@ -56,6 +72,12 @@ public final class HabitStore {
         .append(dates)
         .append(',')
         .append(reminder)
+        .append(',')
+        .append(h.hidden ? '1' : '0')
+        .append(',')
+        .append(sanitizeGroup(h.group))
+        .append(',')
+        .append(h.pinned ? '1' : '0')
         .append(System.lineSeparator());
     }
     Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
@@ -70,5 +92,10 @@ public final class HabitStore {
     } catch (IOException ex) {
       Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING);
     }
+  }
+
+  private static String sanitizeGroup(String group) {
+    if (group == null) return "";
+    return group.replace(',', ' ').replace('\n', ' ').replace('\r', ' ').trim();
   }
 }

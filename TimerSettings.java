@@ -7,7 +7,7 @@ import java.util.Properties;
 
 public final class TimerSettings {
 
-  static final Path FILE = Path.of("timer.properties");
+  static final Path FILE = AppPaths.file("timer.properties");
   static final String KEY_MINUTES = "duration.minutes";
   static final int DEFAULT_MINUTES = 25;
 
